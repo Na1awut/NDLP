@@ -61,6 +61,26 @@ class InMemoryStore:
         """Save user data"""
         self._users[user_id] = data
 
+    async def create_user(self, user_data: dict) -> dict:
+        """Create a new user account"""
+        user_id = user_data["user_id"]
+        self._users[user_id] = user_data
+        return user_data
+
+    async def find_user_by_username(self, username: str) -> Optional[dict]:
+        """Find user by username"""
+        for data in self._users.values():
+            if data.get("username") == username:
+                return data
+        return None
+
+    async def find_user_by_google_id(self, google_id: str) -> Optional[dict]:
+        """Find user by Google ID"""
+        for data in self._users.values():
+            if data.get("google_id") == google_id:
+                return data
+        return None
+
     async def get_all_users(self) -> list[dict]:
         """Get all users (for dashboard)"""
         return list(self._users.values())
@@ -154,6 +174,39 @@ class CosmosStore:
             return list(reversed(items))
         except Exception:
             return []
+
+    async def create_user(self, user_data: dict) -> dict:
+        """Create a new user account in Cosmos DB"""
+        try:
+            await self.container.upsert_item(user_data)
+            return user_data
+        except Exception as e:
+            print(f"[CosmosStore] Create user failed: {e}")
+            raise
+
+    async def find_user_by_username(self, username: str) -> Optional[dict]:
+        """Find user by username in Cosmos DB"""
+        try:
+            query = f"SELECT * FROM c WHERE c.username = '{username}' AND c.auth_provider != null"
+            async for item in self.container.query_items(
+                query=query, enable_cross_partition_query=True
+            ):
+                return item
+        except Exception:
+            pass
+        return None
+
+    async def find_user_by_google_id(self, google_id: str) -> Optional[dict]:
+        """Find user by Google ID in Cosmos DB"""
+        try:
+            query = f"SELECT * FROM c WHERE c.google_id = '{google_id}'"
+            async for item in self.container.query_items(
+                query=query, enable_cross_partition_query=True
+            ):
+                return item
+        except Exception:
+            pass
+        return None
 
     async def get_all_users(self) -> list[dict]:
         try:

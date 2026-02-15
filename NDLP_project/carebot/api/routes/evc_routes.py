@@ -12,14 +12,18 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional
 
 from models.chat_models import ChatRequest, ChatResponse, EVCStateResponse
 from models.evc_models import EVCState, EVCResult
+from models.auth_models import UserProfile
 from evc.engine import update_evc, create_initial_state, get_bot_tone_instruction, get_bot_tone
 from evc.emotion_extractor import extract_emotion
 from evc.rules import get_response_policy
 from evc.therapeutic import get_therapeutic_note
+from api.middleware.auth_middleware import get_current_user
+
 
 router = APIRouter(prefix="/evc", tags=["EVC"])
 
@@ -47,7 +51,10 @@ CAREBOT_SYSTEM_PROMPT = """คุณคือ CareBot — AI เพื่อน�
 
 
 @router.post("/process", response_model=ChatResponse)
-async def process_message(request: ChatRequest):
+async def process_message(
+    request: ChatRequest,
+    auth_user: Optional[UserProfile] = Depends(get_current_user),
+):
     """
     Full EVC pipeline:
     1. Load EVC state from memory
@@ -57,11 +64,15 @@ async def process_message(request: ChatRequest):
     5. Generate LLM response
     6. Save state + message
     7. Return response
+
+    Auth: Optional — if JWT token is provided, user_id comes from the token.
+    Otherwise uses user_id from request body (guest mode / backward compatible).
     """
     if not llm_client or not memory_store:
         raise HTTPException(status_code=500, detail="Services not initialized")
 
-    user_id = request.user_id
+    # Use authenticated user_id if available, otherwise fall back to request body
+    user_id = auth_user.user_id if auth_user else request.user_id
     message = request.message
     is_dev = os.getenv("APP_ENV") == "development"
 

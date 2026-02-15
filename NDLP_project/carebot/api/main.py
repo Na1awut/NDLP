@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from services.llm_client import LLMClient
 from services.memory_store import create_memory_store
 from api.routes import evc_routes
+from api.routes import auth_routes
 
 
 # ──────────────────────────────────────────────
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
     # Inject into routes
     evc_routes.llm_client = llm_client
     evc_routes.memory_store = memory_store
+    auth_routes.memory_store = memory_store
 
     info = llm_client.get_info()
     print(f"   LLM Provider: {info['provider']}")
@@ -82,6 +84,7 @@ app.add_middleware(
 # Routes
 # ──────────────────────────────────────────────
 app.include_router(evc_routes.router)
+app.include_router(auth_routes.router)
 
 
 @app.get("/health")
