@@ -12,12 +12,12 @@ Use this skill whenever a user sends a message that needs emotional analysis and
 1. Receive user message from LINE or Discord
 2. Call the EVC FastAPI backend at `http://localhost:8000/evc/process`
 3. The backend will:
-   - Extract emotion features using Groq 8b model
+   - Extract emotion features using GROK 8b model
    - Compute Support (S), Drag (D), and Sensitivity (K) forces
    - Update emotional energy E using the EVC equation
    - Classify zone and phase
    - Generate response policy
-   - Generate emotionally-aware response using Groq 70b model
+   - Generate emotionally-aware response using GROK 70b model
 4. Return the response to the user
 
 ## API Call

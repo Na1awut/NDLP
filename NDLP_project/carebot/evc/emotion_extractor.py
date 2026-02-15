@@ -1,7 +1,7 @@
 """
-EVC Emotion Extractor — LLM-based emotion extraction using Groq 8b
+EVC Emotion Extractor — LLM-based emotion extraction using GROK 8b
 
-Primary:   Groq llama-3.1-8b-instant → structured JSON
+Primary:   GROK llama-3.1-8b-instant → structured JSON
 Fallback:  Rule-based Thai/English keyword matching
 """
 import json
@@ -16,7 +16,7 @@ from models.evc_models import EmotionFeatures, Intent
 
 
 # ──────────────────────────────────────────────
-# Groq LLM Extraction Prompt
+# GROK LLM Extraction Prompt
 # ──────────────────────────────────────────────
 EXTRACTION_PROMPT = """คุณเป็นผู้เชี่ยวชาญด้านการวิเคราะห์อารมณ์จากข้อความ (ทั้งภาษาไทยและอังกฤษ)
 
@@ -46,13 +46,13 @@ EXTRACTION_PROMPT = """คุณเป็นผู้เชี่ยวชาญ
 ⚠️ ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น"""
 
 
-async def extract_with_groq(text: str, groq_client) -> Optional[EmotionFeatures]:
+async def extract_with_GROK(text: str, GROK_client) -> Optional[EmotionFeatures]:
     """
-    สกัดอารมณ์ผ่าน Groq llama-3.1-8b-instant
+    สกัดอารมณ์ผ่าน GROK llama-3.1-8b-instant
     คืน None ถ้าล้มเหลว (จะ fallback เป็น rule-based)
     """
     try:
-        response = await groq_client.extract_emotion(text, EXTRACTION_PROMPT)
+        response = await GROK_client.extract_emotion(text, EXTRACTION_PROMPT)
 
         if response is None:
             return None
@@ -85,7 +85,7 @@ async def extract_with_groq(text: str, groq_client) -> Optional[EmotionFeatures]
         )
 
     except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
-        print(f"[EVC] Groq extraction failed: {e}")
+        print(f"[EVC] GROK extraction failed: {e}")
         return None
 
 
@@ -143,7 +143,7 @@ def _count_matches(text: str, words: list[str]) -> int:
 def extract_rule_based(text: str) -> EmotionFeatures:
     """
     Rule-based fallback emotion extraction (Thai + English)
-    ใช้เมื่อ Groq ล้มเหลว
+    ใช้เมื่อ GROK ล้มเหลว
     """
     text_lower = text.lower()
 
@@ -210,13 +210,13 @@ def extract_rule_based(text: str) -> EmotionFeatures:
 # ──────────────────────────────────────────────
 # Main Extraction Function
 # ──────────────────────────────────────────────
-async def extract_emotion(text: str, groq_client=None) -> EmotionFeatures:
+async def extract_emotion(text: str, GROK_client=None) -> EmotionFeatures:
     """
     สกัดอารมณ์จากข้อความ
-    Primary: Groq LLM → Fallback: Rule-based
+    Primary: GROK LLM → Fallback: Rule-based
     """
-    if groq_client is not None:
-        result = await extract_with_groq(text, groq_client)
+    if GROK_client is not None:
+        result = await extract_with_GROK(text, GROK_client)
         if result is not None:
             return result
 

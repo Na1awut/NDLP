@@ -46,6 +46,9 @@ def compute_support_force(emotion: EmotionFeatures, evc: EVCState) -> float:
     """
     คำนวณแรงยก (Support Force)
     S = w₁·praise + w₂·apology + w₃·clarity + w₄·trust
+
+    + Valence Dampening: เมื่อ valence < 0, clarity/trust ลดลง
+      เพราะข้อความชัดเจนแต่ "ลบ" ไม่ควรนับเป็นแรงบวก
     """
     # Praise component: positive valence + praise intent
     praise = 0.0
@@ -57,13 +60,19 @@ def compute_support_force(emotion: EmotionFeatures, evc: EVCState) -> float:
     # Apology component
     apology = 0.5 if emotion.intent == Intent.APOLOGY else 0.0
 
-    # Clarity component: inverse of uncertainty
-    clarity = 1.0 - emotion.uncertainty
+    # ── Valence dampening factor ──
+    # valence=-1 → dampen=0.1 (ลดแรง clarity/trust 90%)
+    # valence= 0 → dampen=1.0 (ไม่ลด)
+    # valence=+1 → dampen=1.0 (ไม่ลด)
+    dampen = max(0.1, 1.0 + min(0.0, emotion.valence))
 
-    # Trust component: low sarcasm + positive history
+    # Clarity component: inverse of uncertainty (dampened by valence)
+    clarity = (1.0 - emotion.uncertainty) * dampen
+
+    # Trust component: low sarcasm + positive history (dampened by valence)
     trust_from_sarcasm = (1.0 - emotion.sarcasm_prob) * 0.5
     trust_from_history = 0.3 if evc.E > 0 else 0.0
-    trust = trust_from_sarcasm + trust_from_history
+    trust = (trust_from_sarcasm + trust_from_history) * dampen
 
     S = (
         S_WEIGHTS["praise"] * praise

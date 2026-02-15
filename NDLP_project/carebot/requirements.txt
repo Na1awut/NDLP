@@ -3,7 +3,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 
-# Groq LLM Client
+# LLM Client (Groq)
 groq==0.15.0
 
 # LINE Bot SDK

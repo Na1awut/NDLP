@@ -20,7 +20,7 @@
     }
   ],
   "llm": {
-    "provider": "groq",
+    "provider": "GROK",
     "model": "llama-3.3-70b-versatile"
   }
 }
