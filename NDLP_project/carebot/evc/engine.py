@@ -1,17 +1,21 @@
 """
-EVC Engine — Core Emotional Energy Update Equation (Optimized v3)
+EVC Engine v4 — Hormonal Emotional Model
 
-สมการหลัก:
-  E* = clamp(K × (S - D) × 10, -10, +10)
-  ΔE_raw = I_t × (E* - E_t) - M_t × sgn(E_t) × |E_t|
-  ΔE = clamp(ΔE_raw, -MAX_DELTA, +MAX_DELTA)    ← Rate Limiter
-  E_{t+1} = clamp(E_t + ΔE, -10, +10)
+สมการหลัก: เปลี่ยนจาก single E เป็น Hormone Cocktail
 
-4 Optimizations:
-  1. Adaptive Inertia — กันอารมณ์เหวี่ยง
-  2. Rate-limited ΔE — จำกัด |ΔE| ≤ 3 ต่อ turn
-  3. Time-based Memory Decay — ห่างนาน → ลืมมากขึ้น
-  4. Therapeutic Bias — ค่อยๆ ดันขึ้นเมื่ออยู่โซนลบ
+Pipeline:
+  1. Restore hormone cocktail + bot state จาก previous state
+  2. Update cocktail ด้วย EmotionFeatures
+  3. Compute E_composite จาก cocktail
+  4. Compute forces (S, D, K) — backward compatible
+  5. Update bot mirroring (Pacing & Leading)
+  6. Classify zone & phase
+  7. Update flags
+  8. Return new state + forces
+
+Backward Compatible:
+  - ยังคืน E, zone, phase, delta_E เหมือน v3
+  - เพิ่ม hormone_levels, bot_E, dominant_state
 """
 import math
 import sys
@@ -24,76 +28,27 @@ from models.evc_models import (
     EVCState, EmotionFeatures, EVCForces, EVCFlags,
     EmotionalZone, EmotionalPhase
 )
+from evc.hormones.cocktail import HormoneCocktail
+from evc.hormones.definitions import create_all_hormones
+from evc.mirroring import BotEmotionalState
 from evc.scoring import compute_forces
 from evc.rules import classify_zone, classify_phase, update_flags
-from evc.therapeutic import apply_therapeutic_bias
+from evc.therapeutic import apply_therapeutic_bias, get_therapeutic_note
 
 
 # ──────────────────────────────────────────────
-# Constants
+# Constants (kept for backward compatibility)
 # ──────────────────────────────────────────────
-MAX_DELTA = 3.0          # Maximum |ΔE| per turn
-BASE_INERTIA = 0.3       # Default inertia
-MAX_INERTIA = 0.7        # Maximum adaptive inertia
-BASE_MEMORY_DECAY = 0.05 # Default memory decay
-DELTA_HISTORY_SIZE = 5   # Number of ΔE values to keep
+MAX_DELTA = 3.0
+DELTA_HISTORY_SIZE = 5
 
 
 def clamp(value: float, min_val: float, max_val: float) -> float:
-    """Clamp value between min and max"""
     return max(min_val, min(max_val, value))
 
 
-def sign(x: float) -> float:
-    """Sign function: returns -1, 0, or 1"""
-    if x > 0:
-        return 1.0
-    elif x < 0:
-        return -1.0
-    return 0.0
-
-
 # ──────────────────────────────────────────────
-# Optimization 1: Adaptive Inertia
-# ──────────────────────────────────────────────
-def adaptive_inertia(delta_history: list[float], base: float = BASE_INERTIA) -> float:
-    """
-    ถ้าอารมณ์เหวี่ยงบ่อย (volatile) → เพิ่ม Inertia
-    I = min(0.7, base + 0.1 × mean_volatility_last_3)
-    """
-    if len(delta_history) >= 3:
-        recent = delta_history[-3:]
-        volatility = sum(abs(d) for d in recent) / len(recent)
-        return min(MAX_INERTIA, base + 0.1 * volatility)
-    return base
-
-
-# ──────────────────────────────────────────────
-# Optimization 3: Time-based Memory Decay
-# ──────────────────────────────────────────────
-def time_based_decay(
-    base_M: float,
-    last_timestamp: datetime | None,
-    current_timestamp: datetime
-) -> float:
-    """
-    ห่างนาน = ลืมมากขึ้น
-    M = base × (1 + log(1 + hours_since_last))
-    """
-    if last_timestamp is None:
-        return base_M
-
-    delta = current_timestamp - last_timestamp
-    hours = delta.total_seconds() / 3600.0
-
-    if hours <= 0:
-        return base_M
-
-    return base_M * (1 + math.log(1 + hours))
-
-
-# ──────────────────────────────────────────────
-# Core EVC Update
+# Core EVC v4 Update
 # ──────────────────────────────────────────────
 def update_evc(
     current_state: EVCState,
@@ -101,7 +56,7 @@ def update_evc(
     current_time: datetime | None = None,
 ) -> tuple[EVCState, EVCForces]:
     """
-    Update EVC state using optimized v3 equation.
+    Update EVC state using Hormonal Model v4.
 
     Returns: (new_state, forces)
     """
@@ -110,41 +65,51 @@ def update_evc(
 
     E_prev = current_state.E
 
-    # ── Step 1: Compute forces ──
+    # ── Step 1: Restore hormone cocktail ──
+    cocktail = HormoneCocktail()
+    if current_state.hormone_levels:
+        cocktail.restore_levels(current_state.hormone_levels)
+
+    # ── Step 2: Update cocktail with emotion ──
+    cocktail.update(emotion)
+
+    # ── Step 3: Compute E from cocktail ──
+    E_hormonal = cocktail.compute_E()
+
+    # ── Step 4: Compute forces (backward compatible) ──
     forces = compute_forces(emotion, current_state)
-    S = forces.S
-    D = forces.D
-    K = forces.K
 
-    # ── Step 2: Apply therapeutic bias (Optimization 4) ──
-    S = apply_therapeutic_bias(S, E_prev)
+    # ── Step 5: Apply therapeutic bias ──
+    S_biased = apply_therapeutic_bias(forces.S, E_prev)
+    forces_biased = EVCForces(S=round(S_biased, 4), D=forces.D, K=forces.K)
 
-    # ── Step 3: Compute target energy ──
-    E_target = clamp(K * (S - D) * 10, -10.0, 10.0)
+    # ── Step 6: Blend hormonal E with forces-based E ──
+    # E_target from forces (v3 equation for compatibility)
+    E_target_forces = clamp(forces.K * (S_biased - forces.D) * 10, -10.0, 10.0)
 
-    # ── Step 4: Adaptive inertia (Optimization 1) ──
-    I = adaptive_inertia(current_state.delta_history, BASE_INERTIA)
+    # Blend: 70% hormonal, 30% forces-based (hormonal is primary)
+    E_blended = 0.7 * E_hormonal + 0.3 * E_target_forces
 
-    # ── Step 5: Time-based memory decay (Optimization 3) ──
-    M = time_based_decay(BASE_MEMORY_DECAY, current_state.timestamp, current_time)
-
-    # ── Step 6: Core equation ──
-    delta_E_raw = I * (E_target - E_prev) - M * sign(E_prev) * abs(E_prev)
-
-    # ── Step 7: Rate limiter (Optimization 2) ──
+    # Delta E with rate limiting
+    delta_E_raw = E_blended - E_prev
     delta_E = clamp(delta_E_raw, -MAX_DELTA, MAX_DELTA)
-
-    # ── Step 8: Final energy ──
     E_next = clamp(E_prev + delta_E, -10.0, 10.0)
 
-    # ── Step 9: Classify zone & phase ──
+    # ── Step 7: Bot mirroring ──
+    bot_state = BotEmotionalState()
+    bot_state.E_bot = current_state.bot_E
+    bot_state.pacing_turns = current_state.bot_pacing_turns
+    bot_state.user_negative_streak = current_state.bot_negative_streak
+    bot_state.update(E_next)
+
+    # ── Step 8: Classify zone & phase ──
     zone = classify_zone(E_next)
     phase = classify_phase(E_next, delta_E)
 
-    # ── Step 10: Update flags ──
+    # ── Step 9: Update flags ──
     flags = update_flags(current_state.flags, emotion, E_next)
 
-    # ── Step 11: Update delta history ──
+    # ── Step 10: Update delta history ──
     delta_history = list(current_state.delta_history)
     delta_history.append(round(delta_E, 4))
     if len(delta_history) > DELTA_HISTORY_SIZE:
@@ -155,33 +120,61 @@ def update_evc(
         E=round(E_next, 4),
         E_prev=round(E_prev, 4),
         delta_E=round(delta_E, 4),
-        E_target=round(E_target, 4),
-        I=round(I, 4),
-        M=round(M, 6),
+        E_target=round(E_blended, 4),
+        I=0.3,  # Not used in v4 but kept for compatibility
+        M=0.05,
         zone=zone,
         phase=phase,
         flags=flags,
         turn=current_state.turn + 1,
         timestamp=current_time,
         delta_history=delta_history,
+        # v4 additions
+        hormone_levels=cocktail.serialize_levels(),
+        bot_E=round(bot_state.E_bot, 4),
+        bot_pacing_turns=bot_state.pacing_turns,
+        bot_negative_streak=bot_state.user_negative_streak,
+        dominant_state=cocktail.get_dominant_state(),
     )
 
-    return new_state, forces
+    return new_state, forces_biased
 
 
 def create_initial_state() -> EVCState:
-    """สร้าง EVC state เริ่มต้น (neutral)"""
+    """สร้าง EVC state เริ่มต้น (neutral) with baseline hormones"""
+    cocktail = HormoneCocktail()
+
     return EVCState(
         E=0.0,
         E_prev=0.0,
         delta_E=0.0,
         E_target=0.0,
-        I=BASE_INERTIA,
-        M=BASE_MEMORY_DECAY,
+        I=0.3,
+        M=0.05,
         zone=EmotionalZone.NEUTRAL,
         phase=EmotionalPhase.STABLE,
         flags=EVCFlags(),
         turn=0,
         timestamp=datetime.now(),
         delta_history=[],
+        hormone_levels=cocktail.serialize_levels(),
+        bot_E=0.0,
+        bot_pacing_turns=0,
+        bot_negative_streak=0,
+        dominant_state="neutral",
     )
+
+
+def get_bot_tone_instruction(state: EVCState) -> str:
+    """Get bot tone instruction for LLM from current state."""
+    bot = BotEmotionalState()
+    bot.E_bot = state.bot_E
+    bot.pacing_turns = state.bot_pacing_turns
+    return bot.get_tone_instruction()
+
+
+def get_bot_tone(state: EVCState) -> str:
+    """Get bot tone label from current state."""
+    bot = BotEmotionalState()
+    bot.E_bot = state.bot_E
+    return bot.get_tone()

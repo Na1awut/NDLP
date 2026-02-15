@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException
 
 from models.chat_models import ChatRequest, ChatResponse, EVCStateResponse
 from models.evc_models import EVCState, EVCResult
-from evc.engine import update_evc, create_initial_state
+from evc.engine import update_evc, create_initial_state, get_bot_tone_instruction, get_bot_tone
 from evc.emotion_extractor import extract_emotion
 from evc.rules import get_response_policy
 from evc.therapeutic import get_therapeutic_note
@@ -83,9 +83,12 @@ async def process_message(request: ChatRequest):
     )
 
     # ── Step 5: Generate response ──
+    bot_tone = get_bot_tone_instruction(new_state)
     evc_context = (
         f"สถานะอารมณ์: E={new_state.E:.1f} ({new_state.zone.value}, {new_state.phase.value})\n"
+        f"สภาวะหลัก: {new_state.dominant_state}\n"
         f"นโยบาย: {policy}\n"
+        f"{bot_tone}\n"
     )
     if therapeutic_note:
         evc_context += f"คำแนะนำ: {therapeutic_note}\n"
@@ -123,6 +126,12 @@ async def process_message(request: ChatRequest):
         debug_info = {
             "emotion": emotion.model_dump(),
             "forces": forces.model_dump(),
+            "hormones": new_state.hormone_levels,
+            "dominant_state": new_state.dominant_state,
+            "bot": {
+                "E_bot": round(new_state.bot_E, 2),
+                "tone": get_bot_tone(new_state),
+            },
             "policy": policy,
             "therapeutic_note": therapeutic_note,
             "provider": llm_client.get_info()["provider"],

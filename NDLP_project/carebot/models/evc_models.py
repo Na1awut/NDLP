@@ -108,6 +108,13 @@ class EVCState(BaseModel):
     # History for adaptive inertia
     delta_history: list[float] = Field(default_factory=list, description="Recent ΔE values")
 
+    # EVC v4: Hormonal model state
+    hormone_levels: dict[str, float] = Field(default_factory=dict, description="Hormone levels for cocktail persistence")
+    bot_E: float = Field(0.0, description="Bot emotional state (for mirroring)")
+    bot_pacing_turns: int = Field(0, description="Bot pacing turn count")
+    bot_negative_streak: int = Field(0, description="User negative streak for bot mirroring")
+    dominant_state: str = Field("neutral", description="Dominant emotional state label")
+
 
 # ──────────────────────────────────────────────
 # EVC Processing Result
