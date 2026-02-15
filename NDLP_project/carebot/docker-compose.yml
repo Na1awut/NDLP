@@ -1,0 +1,19 @@
+# CareBot — Docker Compose (Development)
+services:
+  carebot:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app              # Live reload: แก้โค้ดปุ๊บเห็นผลปั๊บ
+      - /app/__pycache__     # Prevent __pycache__ sync issues
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=development
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

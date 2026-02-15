@@ -1,0 +1,35 @@
+# CareBot Dependencies
+# API Framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Groq LLM Client
+groq==0.15.0
+
+# LINE Bot SDK
+line-bot-sdk==3.14.0
+
+# Discord Bot
+discord.py==2.5.2
+
+# Azure Cosmos DB
+azure-cosmos==4.9.0
+
+# Auth
+pyjwt==2.10.1
+
+# Data validation
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# HTTP client
+httpx==0.28.1
+aiohttp==3.11.12
+
+# Utilities
+python-dotenv==1.0.1
+python-multipart==0.0.20
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.3

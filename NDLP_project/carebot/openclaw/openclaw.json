@@ -1,0 +1,26 @@
+{
+  "name": "CareBot",
+  "description": "AI chatbot ดูแลสุขภาพจิตนักเรียน ม.ต้น-ม.ปลาย ด้วยระบบ EVC",
+  "skills": [
+    {
+      "name": "carebot-evc",
+      "enabled": true
+    },
+    {
+      "name": "carebot-alert",
+      "enabled": true
+    },
+    {
+      "name": "carebot-line",
+      "enabled": true
+    },
+    {
+      "name": "carebot-discord",
+      "enabled": true
+    }
+  ],
+  "llm": {
+    "provider": "groq",
+    "model": "llama-3.3-70b-versatile"
+  }
+}
